@@ -77,8 +77,26 @@ export default function Command() {
     if (!safeText) return;
 
     if (isRemoteMode) {
+      if (!activeBingoId || !participantId) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Unable to save answer",
+          message: "Missing participant context",
+        });
+        return;
+      }
+      const currentCell = allCells.find((c) => c.id === cellId);
       try {
-        const { error } = await supabase.from("bingo_cells").update({ text: safeText }).eq("id", cellId);
+        const { error } = await supabase.from("bingo_progress").upsert(
+          {
+            bingo_id: activeBingoId,
+            participant_id: participantId,
+            cell_id: cellId,
+            status: currentCell?.status ?? "todo",
+            answer_text: safeText,
+          },
+          { onConflict: "participant_id,cell_id" },
+        );
         if (error) throw new Error(error.message);
         await refreshRemoteState();
       } catch (caught) {
@@ -115,6 +133,7 @@ export default function Command() {
             participant_id: participantId,
             cell_id: cellId,
             status: nextStatus,
+            answer_text: currentCell.text || null,
           },
           { onConflict: "participant_id,cell_id" },
         );
@@ -295,7 +314,7 @@ async function fetchRemoteGridState(
 
   const { data: progressData, error: progressError } = await supabase
     .from("bingo_progress")
-    .select("cell_id,status")
+    .select("cell_id,status,answer_text")
     .eq("bingo_id", bingoId)
     .eq("participant_id", participantId);
 
@@ -303,17 +322,23 @@ async function fetchRemoteGridState(
     throw new Error(progressError.message);
   }
 
-  const progressByCell = new Map<string, string>();
+  const progressByCell = new Map<string, { status: string; answer_text: string | null }>();
   for (const row of progressData ?? []) {
-    progressByCell.set(String(row.cell_id), String(row.status));
+    progressByCell.set(String(row.cell_id), {
+      status: String(row.status),
+      answer_text: row.answer_text != null ? String(row.answer_text) : null,
+    });
   }
 
-  const cells: BingoCell[] = (cellsData ?? []).map((row) => ({
-    id: String(row.id),
-    text: String(row.text),
-    prompt: row.prompt != null ? String(row.prompt) : undefined,
-    status: progressByCell.get(String(row.id)) === "validated" ? "validated" : "todo",
-  }));
+  const cells: BingoCell[] = (cellsData ?? []).map((row) => {
+    const progress = progressByCell.get(String(row.id));
+    return {
+      id: String(row.id),
+      text: progress?.answer_text ?? "",
+      prompt: row.prompt != null ? String(row.prompt) : undefined,
+      status: progress?.status === "validated" ? "validated" : "todo",
+    };
+  });
 
   return { participantId, cells };
 }
