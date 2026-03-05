@@ -63,12 +63,6 @@ export default function Command() {
     keepPreviousData: true,
   });
 
-  const itemCountOptions = [
-    { title: "9 (3×3)", value: "9" },
-    { title: "16 (4×4)", value: "16" },
-    { title: "25 (5×5)", value: "25" },
-  ];
-
   function parsePrompts(promptsText: string, count: number): { text: string; prompt: string | null }[] {
     const lines = promptsText
       .split(/\r?\n/)

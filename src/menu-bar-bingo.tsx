@@ -52,7 +52,7 @@ export default function MenuBarCommand() {
       <MenuBarExtra.Separator />
       <MenuBarExtra.Item
         title="View challenges"
-        icon={Icon.Grid3X3}
+        icon={Icon.Trophy}
         onAction={() => launchCommand({ name: "view-grid", type: LaunchType.UserInitiated })}
       />
       <MenuBarExtra.Item

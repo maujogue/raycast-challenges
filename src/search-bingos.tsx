@@ -90,7 +90,7 @@ export default function Command() {
         <List.EmptyView
           title="No bingos available"
           description="Ask someone to create a bingo first."
-          icon={Icon.Grid}
+          icon={Icon.Trophy}
         />
       ) : null}
 
@@ -105,7 +105,7 @@ export default function Command() {
               <ActionPanel>
                 <Action.Push
                   title="Join Bingo"
-                  icon={Icon.PersonAdd}
+                  icon={Icon.Person}
                   target={<JoinBingoForm defaultName={displayName} onSubmit={(values) => runJoin(bingo.id, values)} />}
                 />
                 <Action.CopyToClipboard title="Copy Bingo ID" content={bingo.id} />

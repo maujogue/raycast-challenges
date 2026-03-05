@@ -2,9 +2,10 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "bingo",
   "title": "Bingo!",
-  "description": "A frontend for the raycast bingo! \nDesigned for the Lyon meetuup.",
+  "description": "A frontend for the Raycast bingo! \nDesigned for the Lyon meetuup.",
   "icon": "pill.png",
   "author": "maujogue",
+  "owner": "maujogue-org",
   "platforms": [
     "macOS",
     "Windows"
@@ -16,35 +17,35 @@
   "commands": [
     {
       "name": "check-leaderboard",
-      "title": "Check leaderboard",
+      "title": "Check Leaderboard",
       "subtitle": "Bingo",
       "description": "Check who has the lead!",
       "mode": "view"
     },
     {
       "name": "view-grid",
-      "title": "View challenges",
+      "title": "View Challenges",
       "subtitle": "Bingo",
       "description": "Check your grid, edit what's done",
       "mode": "view"
     },
     {
       "name": "manage-bingos",
-      "title": "Manage bingos",
+      "title": "Manage Bingos",
       "subtitle": "Bingo",
       "description": "Create, edit and delete bingos",
       "mode": "view"
     },
     {
       "name": "search-bingos",
-      "title": "Search bingos",
+      "title": "Search Bingos",
       "subtitle": "Bingo",
       "description": "Search and join other bingos",
       "mode": "view"
     },
     {
       "name": "menu-bar-bingo",
-      "title": "Score & rank",
+      "title": "Score & Rank",
       "subtitle": "Bingo",
       "description": "Show current score and rank in the menu bar",
       "mode": "menu-bar",

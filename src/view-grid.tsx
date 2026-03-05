@@ -66,7 +66,6 @@ export default function Command() {
           message: "You completed the grid! You're a winner!",
         });
         open("raycast://extensions/raycast/raycast/confetti");
-
       }
     } else if (score.completionRate < 1) {
       hasShownWinnerToast.current = false;
@@ -182,11 +181,7 @@ export default function Command() {
       }
     >
       {isRemoteMode && remoteError ? (
-        <List.EmptyView
-          icon={Icon.ExclamationMark}
-          title="Unable to load bingo"
-          description={remoteError.message}
-        />
+        <List.EmptyView icon={Icon.ExclamationMark} title="Unable to load bingo" description={remoteError.message} />
       ) : null}
 
       {isRemoteMode && !remoteError && !isRemoteLoading && allCells.length === 0 ? (
@@ -241,10 +236,7 @@ export default function Command() {
   );
 }
 
-function EditAnswerForm(props: {
-  cell: BingoCell;
-  onSubmit: (cellId: string, nextText: string) => Promise<void>;
-}) {
+function EditAnswerForm(props: { cell: BingoCell; onSubmit: (cellId: string, nextText: string) => Promise<void> }) {
   const { cell, onSubmit } = props;
   const { pop } = useNavigation();
   return (

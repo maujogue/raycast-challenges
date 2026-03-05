@@ -75,8 +75,7 @@ export default function Command() {
 
   const { data: bingos = [], isLoading: isLoadingBingos, error: bingosError } = useCachedPromise(fetchBingoOptions, []);
 
-  const activeBingoId =
-    selectedBingoId && selectedBingoId !== "local" ? selectedBingoId : bingos[0]?.id ?? "";
+  const activeBingoId = selectedBingoId && selectedBingoId !== "local" ? selectedBingoId : (bingos[0]?.id ?? "");
   const activeBingoTitle = bingos.find((bingo) => bingo.id === activeBingoId)?.title ?? "No Bingo Selected";
 
   const {
