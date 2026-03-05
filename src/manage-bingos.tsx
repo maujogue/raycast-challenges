@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Action, ActionPanel, Form, Icon, Keyboard, List, Toast, showToast } from "@raycast/api";
+import { Action, ActionPanel, Form, Icon, Keyboard, List, Toast, showToast, useNavigation } from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
 import { supabase } from "./lib/supabase";
 import { generateUUID } from "./lib/uuid";
@@ -23,7 +23,10 @@ interface BingoSummary {
   owner_id: string;
 }
 
+type BingoFilter = "all" | "mine";
+
 async function fetchOwnedBingos(ownerId: string): Promise<BingoSummary[]> {
+  if (!ownerId) return [];
   const { data, error } = await supabase
     .from("bingos")
     .select("id,title,theme,owner_id")
@@ -42,9 +45,42 @@ async function fetchOwnedBingos(ownerId: string): Promise<BingoSummary[]> {
   }));
 }
 
+async function fetchJoinedBingos(participantKey: string): Promise<BingoSummary[]> {
+  if (!participantKey) return [];
+  const { data: participantsData, error: participantsError } = await supabase
+    .from("bingo_participants")
+    .select("bingo_id")
+    .eq("participant_key", participantKey);
+
+  if (participantsError) {
+    throw new Error(participantsError.message);
+  }
+  if (!participantsData?.length) return [];
+
+  const bingoIds = participantsData.map((r) => r.bingo_id);
+  const { data: bingosData, error: bingosError } = await supabase
+    .from("bingos")
+    .select("id,title,theme,owner_id")
+    .in("id", bingoIds)
+    .order("created_at", { ascending: false });
+
+  if (bingosError) {
+    throw new Error(bingosError.message);
+  }
+
+  return (bingosData ?? []).map((row) => ({
+    id: String(row.id),
+    title: String(row.title ?? "Untitled Bingo"),
+    theme: row.theme ? String(row.theme) : null,
+    owner_id: String(row.owner_id),
+  }));
+}
+
 export default function Command() {
   const [ownerId, setOwnerId] = useCachedState<string>("local-owner-id", "");
+  const [participantKey, setParticipantKey] = useCachedState<string>("local-participant-key", "");
   const [selectedBingoId, setSelectedBingoId] = useCachedState<string>("selected-bingo-id", "");
+  const [bingoFilter, setBingoFilter] = useCachedState<BingoFilter>("manage-bingos-filter", "all");
   const [, setLocalGridCells] = useCachedState<BingoCell[]>("bingo-grid-cells", createDefaultLocalCells());
 
   useEffect(() => {
@@ -53,15 +89,46 @@ export default function Command() {
     }
   }, [ownerId, setOwnerId]);
 
+  useEffect(() => {
+    if (!participantKey) {
+      setParticipantKey(generateUUID());
+    }
+  }, [participantKey, setParticipantKey]);
+
   const {
-    data: bingos = [],
-    isLoading,
-    error,
-    mutate,
+    data: ownedBingos = [],
+    isLoading: isOwnedLoading,
+    error: ownedError,
+    mutate: mutateOwned,
   } = useCachedPromise(fetchOwnedBingos, [ownerId], {
     execute: Boolean(ownerId),
     keepPreviousData: true,
   });
+
+  const {
+    data: joinedBingos = [],
+    isLoading: isJoinedLoading,
+    error: joinedError,
+    mutate: mutateJoined,
+  } = useCachedPromise(fetchJoinedBingos, [participantKey], {
+    execute: Boolean(participantKey),
+    keepPreviousData: true,
+  });
+
+  const ownedIds = new Set(ownedBingos.map((b) => b.id));
+  const allBingos = [
+    ...ownedBingos,
+    ...joinedBingos.filter((b) => !ownedIds.has(b.id)),
+  ];
+
+  const bingos =
+    bingoFilter === "mine" ? allBingos.filter((b) => b.owner_id === ownerId) : allBingos;
+  const isLoading = isOwnedLoading || isJoinedLoading;
+  const error = ownedError ?? joinedError;
+
+  async function mutate() {
+    await Promise.all([mutateOwned(), mutateJoined()]);
+  }
 
   function parsePrompts(promptsText: string, count: number): { text: string; prompt: string | null }[] {
     const lines = promptsText
@@ -162,6 +229,16 @@ export default function Command() {
     <List
       isLoading={isLoading}
       searchBarPlaceholder="Manage your bingos"
+      searchBarAccessory={
+        <List.Dropdown
+          tooltip="Filter"
+          value={bingoFilter}
+          onChange={(value) => setBingoFilter(value as BingoFilter)}
+        >
+          <List.Dropdown.Item value="all" title="All (yours + joined)" />
+          <List.Dropdown.Item value="mine" title="Mine only" />
+        </List.Dropdown>
+      }
       actions={
         <ActionPanel>
           <Action.Push
@@ -177,7 +254,15 @@ export default function Command() {
         <List.EmptyView title="Unable to load bingos" description={error.message} icon={Icon.ExclamationMark} />
       ) : null}
       {!error && !isLoading && bingos.length === 0 ? (
-        <List.EmptyView title="No bingos yet" description="Create your first bingo board." icon={Icon.Circle} />
+        <List.EmptyView
+          title={bingoFilter === "mine" ? "No bingos you own" : "No bingos yet"}
+          description={
+            bingoFilter === "mine"
+              ? "Create one or switch to “All” to see joined bingos."
+              : "Create your first bingo or join one from Search Bingos."
+          }
+          icon={Icon.Circle}
+        />
       ) : null}
 
       <List.Item
@@ -215,47 +300,57 @@ export default function Command() {
       />
 
       {!error &&
-        bingos.map((bingo) => (
-          <List.Item
-            key={bingo.id}
-            title={bingo.title}
-            subtitle={
-              selectedBingoId === bingo.id ? "Active in View challenges / Leaderboard" : (bingo.theme ?? "No theme")
-            }
-            icon={Icon.Circle}
-            accessories={selectedBingoId === bingo.id ? [{ icon: Icon.Checkmark }] : []}
-            actions={
-              <ActionPanel>
-                <Action
-                  title="Set as Active Bingo"
-                  icon={Icon.Checkmark}
-                  onAction={async () => {
-                    setSelectedBingoId(bingo.id);
-                    await showToast({ style: Toast.Style.Success, title: `"${bingo.title}" is now active` });
-                  }}
-                />
-                <Action.Push
-                  title="Edit Bingo"
-                  shortcut={{ modifiers: ["cmd"], key: "e" }}
-                  icon={Icon.Pencil}
-                  target={
-                    <EditBingoForm
-                      bingoId={bingo.id}
-                      bingo={bingo}
-                      onSubmit={(values) => runAndRefresh(() => handleUpdate(bingo.id, values), "Bingo updated")}
+        bingos.map((bingo) => {
+          const isOwned = bingo.owner_id === ownerId;
+          return (
+            <List.Item
+              key={bingo.id}
+              title={bingo.title}
+              subtitle={
+                selectedBingoId === bingo.id
+                  ? "Active in View challenges / Leaderboard"
+                  : [bingo.theme ?? "No theme", isOwned ? "Yours" : "Joined"].filter(Boolean).join(" · ")
+              }
+              icon={Icon.Circle}
+              accessories={[
+                ...(selectedBingoId === bingo.id ? [{ icon: Icon.Checkmark }] : []),
+                { text: isOwned ? "Yours" : "Joined" },
+              ]}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Set as Active Bingo"
+                    icon={Icon.Checkmark}
+                    onAction={async () => {
+                      setSelectedBingoId(bingo.id);
+                      await showToast({ style: Toast.Style.Success, title: `"${bingo.title}" is now active` });
+                    }}
+                  />
+                  {isOwned ? (
+                    <Action.Push
+                      title="Edit Bingo"
+                      shortcut={{ modifiers: ["cmd"], key: "e" }}
+                      icon={Icon.Pencil}
+                      target={
+                        <EditBingoForm
+                          bingoId={bingo.id}
+                          bingo={bingo}
+                          onSubmit={(values) => runAndRefresh(() => handleUpdate(bingo.id, values), "Bingo updated")}
+                        />
+                      }
                     />
-                  }
-                />
-                <Action.Push
-                  title="Create Bingo"
-                  icon={Icon.Plus}
-                  shortcut={Keyboard.Shortcut.Common.New}
-                  target={<CreateBingoForm onSubmit={handleCreateAndRefresh} />}
-                />
-              </ActionPanel>
-            }
-          />
-        ))}
+                  ) : null}
+                  <Action.Push
+                    title="Create Bingo"
+                    icon={Icon.Plus}
+                    shortcut={Keyboard.Shortcut.Common.New}
+                    target={<CreateBingoForm onSubmit={handleCreateAndRefresh} />}
+                  />
+                </ActionPanel>
+              }
+            />
+          );
+        })}
     </List>
   );
 
@@ -267,11 +362,18 @@ export default function Command() {
 function CreateBingoForm(props: {
   onSubmit: (values: { title: string; theme: string; itemCount: string; prompts: string }) => Promise<void>;
 }) {
+  const { pop } = useNavigation();
   return (
     <Form
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Create Bingo" onSubmit={props.onSubmit} />
+          <Action.SubmitForm
+            title="Create Bingo"
+            onSubmit={async (values: { title: string; theme: string; itemCount: string; prompts: string }) => {
+              await props.onSubmit(values);
+              pop();
+            }}
+          />
         </ActionPanel>
       }
     >

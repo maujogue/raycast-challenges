@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Action, ActionPanel, Form, Icon, List, Toast, showToast } from "@raycast/api";
+import { Action, ActionPanel, Form, Icon, launchCommand, LaunchType, List, Toast, showToast } from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
 import { supabase } from "./lib/supabase";
 import { generateUUID } from "./lib/uuid";
@@ -75,8 +75,21 @@ export default function Command() {
       await joinBingo(bingoId, values);
       await mutate();
       await showToast({ style: Toast.Style.Success, title: "Joined bingo" });
+      await launchCommand({ name: "view-grid", type: LaunchType.UserInitiated });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Unknown error";
+      const err = caught as { code?: string; message?: string };
+      const isAlreadyParticipant =
+        err?.code === "23505" ||
+        (typeof err?.message === "string" && /unique|duplicate|already exists/i.test(err.message));
+
+      if (isAlreadyParticipant) {
+        setSelectedBingoId(bingoId);
+        await mutate();
+        await showToast({ style: Toast.Style.Success, title: "You are already a participant" });
+        await launchCommand({ name: "view-grid", type: LaunchType.UserInitiated });
+        return;
+      }
+      const message = caught instanceof Error ? (caught as Error).message : "Unknown error";
       await showToast({ style: Toast.Style.Failure, title: "Unable to join bingo", message });
     }
   }
