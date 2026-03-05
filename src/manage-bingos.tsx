@@ -126,25 +126,24 @@ export default function Command() {
     await Promise.all([mutateOwned(), mutateJoined()]);
   }
 
-  function parsePrompts(promptsText: string, count: number): { text: string; prompt: string | null }[] {
+  function parsePrompts(promptsText: string): { text: string; prompt: string | null }[] {
     const lines = promptsText
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean);
-    return Array.from({ length: count }, (_, i) => {
-      const line = lines[i] ?? "";
-      return { text: line || `Entry ${i + 1}`, prompt: line || null };
-    });
+    if (lines.length === 0) {
+      return Array.from({ length: 25 }, (_, i) => ({ text: `Entry ${i + 1}`, prompt: null }));
+    }
+    return lines.map((line) => ({ text: line || "Entry", prompt: line || null }));
   }
 
-  async function handleCreate(values: { title: string; theme: string; itemCount: string; prompts: string }) {
+  async function handleCreate(values: { title: string; theme: string; prompts: string }) {
     if (!ownerId) {
       await showToast({ style: Toast.Style.Failure, title: "Owner identity not ready yet" });
       return;
     }
 
-    const count = parseInt(values.itemCount, 10) || 25;
-    const entries = parsePrompts(values.prompts.trim(), count);
+    const entries = parsePrompts(values.prompts.trim());
 
     const { data: bingoData, error: bingoError } = await supabase
       .from("bingos")
@@ -174,10 +173,7 @@ export default function Command() {
     }
   }
 
-  async function handleUpdate(
-    bingoId: string,
-    values: { title: string; theme: string; itemCount: string; prompts: string },
-  ) {
+  async function handleUpdate(bingoId: string, values: { title: string; theme: string; prompts: string }) {
     const { error: updateError } = await supabase
       .from("bingos")
       .update({
@@ -190,8 +186,7 @@ export default function Command() {
       throw new Error(updateError.message);
     }
 
-    const count = parseInt(values.itemCount, 10) || 25;
-    const entries = parsePrompts(values.prompts.trim(), count);
+    const entries = parsePrompts(values.prompts.trim());
 
     const { error: deleteError } = await supabase.from("bingo_cells").delete().eq("bingo_id", bingoId);
     if (deleteError) {
@@ -346,13 +341,13 @@ export default function Command() {
     </List>
   );
 
-  async function handleCreateAndRefresh(values: { title: string; theme: string; itemCount: string; prompts: string }) {
+  async function handleCreateAndRefresh(values: { title: string; theme: string; prompts: string }) {
     await runAndRefresh(() => handleCreate(values), "Bingo created");
   }
 }
 
 function CreateBingoForm(props: {
-  onSubmit: (values: { title: string; theme: string; itemCount: string; prompts: string }) => Promise<void>;
+  onSubmit: (values: { title: string; theme: string; prompts: string }) => Promise<void>;
 }) {
   const { pop } = useNavigation();
   return (
@@ -361,7 +356,7 @@ function CreateBingoForm(props: {
         <ActionPanel>
           <Action.SubmitForm
             title="Create Bingo"
-            onSubmit={async (values: { title: string; theme: string; itemCount: string; prompts: string }) => {
+            onSubmit={async (values: { title: string; theme: string; prompts: string }) => {
               await props.onSubmit(values);
               pop();
             }}
@@ -371,11 +366,6 @@ function CreateBingoForm(props: {
     >
       <Form.TextField id="title" title="Title" placeholder="Raycast Meetup Bingo" />
       <Form.TextField id="theme" title="Theme" placeholder="Raycast Icebreakers" />
-      <Form.Dropdown id="itemCount" title="Number of items" defaultValue="25">
-        <Form.Dropdown.Item value="9" title="9 (3×3)" />
-        <Form.Dropdown.Item value="16" title="16 (4×4)" />
-        <Form.Dropdown.Item value="25" title="25 (5×5)" />
-      </Form.Dropdown>
       <Form.TextArea
         id="prompts"
         title="Prompts (one per line)"
@@ -403,11 +393,10 @@ async function fetchBingoCells(bingoId: string): Promise<{ text: string; prompt:
 function EditBingoForm(props: {
   bingoId: string;
   bingo: BingoSummary;
-  onSubmit: (values: { title: string; theme: string; itemCount: string; prompts: string }) => Promise<void>;
+  onSubmit: (values: { title: string; theme: string; prompts: string }) => Promise<void>;
 }) {
   const { data: cells = [], isLoading } = useCachedPromise(fetchBingoCells, [props.bingoId]);
   const promptsDefault = cells.map((c) => c.prompt || c.text).join("\n");
-  const itemCount = cells.length || 25;
 
   return (
     <Form
@@ -420,11 +409,6 @@ function EditBingoForm(props: {
     >
       <Form.TextField id="title" title="Title" defaultValue={props.bingo.title} />
       <Form.TextField id="theme" title="Theme" defaultValue={props.bingo.theme ?? ""} />
-      <Form.Dropdown id="itemCount" title="Number of items" defaultValue={String(itemCount)}>
-        <Form.Dropdown.Item value="9" title="9 (3×3)" />
-        <Form.Dropdown.Item value="16" title="16 (4×4)" />
-        <Form.Dropdown.Item value="25" title="25 (5×5)" />
-      </Form.Dropdown>
       <Form.TextArea
         id="prompts"
         title="Prompts (one per line)"

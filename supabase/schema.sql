@@ -32,7 +32,7 @@ create table if not exists public.bingo_cells (
   bingo_id uuid not null references public.bingos(id) on delete cascade,
   text text not null check (char_length(text) > 0),
   prompt text,
-  position int not null check (position >= 0 and position < 25),
+  position int not null check (position >= 0),
   created_at timestamptz not null default now(),
   unique (bingo_id, position)
 );

@@ -255,9 +255,11 @@ export default function Command() {
             detail={
               <List.Item.Detail
                 markdown={[
+                  `## ${promptTitle}`,
+                  "",
                   cell.text || "_No answer yet_",
                   cell.helpedByDisplayName ? `\n\n_Helped by: ${cell.helpedByDisplayName}_` : "",
-                ].join("")}
+                ].join("\n")}
               />
             }
             actions={
