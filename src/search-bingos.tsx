@@ -90,7 +90,7 @@ export default function Command() {
       await joinBingo(bingoId, values);
       await mutate();
       await showToast({ style: Toast.Style.Success, title: "Joined bingo" });
-      await launchCommand({ name: "view-grid", type: LaunchType.UserInitiated });
+      await launchCommand({ name: "view-challenges", type: LaunchType.UserInitiated });
     } catch (caught) {
       const err = caught as { code?: string; message?: string };
       const isAlreadyParticipant =
@@ -101,7 +101,7 @@ export default function Command() {
         setSelectedBingoId(bingoId);
         await mutate();
         await showToast({ style: Toast.Style.Success, title: "You are already a participant" });
-        await launchCommand({ name: "view-grid", type: LaunchType.UserInitiated });
+        await launchCommand({ name: "view-challenges", type: LaunchType.UserInitiated });
         return;
       }
       const message = caught instanceof Error ? (caught as Error).message : "Unknown error";

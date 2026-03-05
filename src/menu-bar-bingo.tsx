@@ -53,7 +53,7 @@ export default function MenuBarCommand() {
       <MenuBarExtra.Item
         title="View challenges"
         icon={Icon.Trophy}
-        onAction={() => launchCommand({ name: "view-grid", type: LaunchType.UserInitiated })}
+        onAction={() => launchCommand({ name: "view-challenges", type: LaunchType.UserInitiated })}
       />
       <MenuBarExtra.Item
         title="Check leaderboard"

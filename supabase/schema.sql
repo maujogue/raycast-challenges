@@ -52,6 +52,7 @@ create table if not exists public.bingo_progress (
   participant_id uuid not null references public.bingo_participants(id) on delete cascade,
   cell_id uuid not null references public.bingo_cells(id) on delete cascade,
   status text not null check (status in ('todo', 'validated')),
+  helped_by_participant_id uuid references public.bingo_participants(id) on delete set null,
   updated_at timestamptz not null default now(),
   unique (participant_id, cell_id)
 );
@@ -70,6 +71,7 @@ create index if not exists idx_bingo_participants_bingo_id on public.bingo_parti
 create index if not exists idx_bingo_progress_bingo_id on public.bingo_progress(bingo_id);
 create index if not exists idx_bingo_progress_participant_id on public.bingo_progress(participant_id);
 create index if not exists idx_bingo_progress_status on public.bingo_progress(status);
+create index if not exists idx_bingo_progress_helped_by on public.bingo_progress(helped_by_participant_id);
 
 alter table public.bingos enable row level security;
 alter table public.bingo_cells enable row level security;

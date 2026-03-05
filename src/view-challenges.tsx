@@ -1,9 +1,32 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Action, ActionPanel, Form, Icon, List, Toast, showToast, open, useNavigation } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Form,
+  Icon,
+  List,
+  Toast,
+  showToast,
+  open,
+  useNavigation,
+  clearSearchBar,
+} from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
 import { supabase } from "./lib/supabase";
 import { generateUUID } from "./lib/uuid";
 import { BingoCell, computeScore } from "./types/bingo";
+
+export type BingoParticipantOption = { id: string; displayName: string };
+
+async function fetchBingoParticipants(bingoId: string): Promise<BingoParticipantOption[]> {
+  const { data, error } = await supabase
+    .from("bingo_participants")
+    .select("id,display_name")
+    .eq("bingo_id", bingoId)
+    .order("joined_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({ id: String(r.id), displayName: r.display_name ?? "Anonymous" }));
+}
 
 type StatusFilter = "all" | "validated" | "todo";
 
@@ -72,7 +95,7 @@ export default function Command() {
     }
   }, [isRemoteMode, score.completionRate, score.totalCells]);
 
-  async function updateCellAnswer(cellId: string, nextText: string) {
+  async function updateCellAnswer(cellId: string, nextText: string, helpedByParticipantId: string | null = null) {
     const safeText = nextText.trim();
     if (!safeText) return;
 
@@ -94,6 +117,7 @@ export default function Command() {
             cell_id: cellId,
             status: currentCell?.status ?? "todo",
             answer_text: safeText,
+            helped_by_participant_id: helpedByParticipantId || null,
           },
           { onConflict: "participant_id,cell_id" },
         );
@@ -134,6 +158,7 @@ export default function Command() {
             cell_id: cellId,
             status: nextStatus,
             answer_text: currentCell.text || null,
+            helped_by_participant_id: currentCell.helpedByParticipantId ?? null,
           },
           { onConflict: "participant_id,cell_id" },
         );
@@ -227,13 +252,26 @@ export default function Command() {
             icon={cell.status === "validated" ? Icon.Checkmark : Icon.Circle}
             title={promptTitle}
             accessories={[{ text: cell.status === "validated" ? "Validated" : "To-do" }]}
-            detail={<List.Item.Detail markdown={cell.text || "_No answer yet_"} />}
+            detail={
+              <List.Item.Detail
+                markdown={[
+                  cell.text || "_No answer yet_",
+                  cell.helpedByDisplayName ? `\n\n_Helped by: ${cell.helpedByDisplayName}_` : "",
+                ].join("")}
+              />
+            }
             actions={
               <ActionPanel>
                 <Action.Push
                   title="Edit Answer"
                   icon={Icon.Pencil}
-                  target={<EditAnswerForm cell={cell} onSubmit={updateCellAnswer} />}
+                  target={
+                    <EditAnswerForm
+                      cell={cell}
+                      bingoId={isRemoteMode ? activeBingoId : undefined}
+                      onSubmit={updateCellAnswer}
+                    />
+                  }
                 />
                 <Action
                   title={cell.status === "validated" ? "Mark as to Complete" : "Mark as Validated"}
@@ -255,25 +293,80 @@ export default function Command() {
   );
 }
 
-function EditAnswerForm(props: { cell: BingoCell; onSubmit: (cellId: string, nextText: string) => Promise<void> }) {
-  const { cell, onSubmit } = props;
+function SelectHelperList(props: {
+  bingoId: string;
+  cellId: string;
+  answerText: string;
+  onSave: (cellId: string, answerText: string, helpedByParticipantId: string | null) => Promise<void>;
+}) {
+  const { bingoId, cellId, answerText, onSave } = props;
+  const { data: participants = [], isLoading } = useCachedPromise(fetchBingoParticipants, [bingoId]);
   const { pop } = useNavigation();
+  async function selectAndSave(helpedByParticipantId: string) {
+    await onSave(cellId, answerText, helpedByParticipantId);
+    pop();
+    pop();
+    await clearSearchBar();
+  }
+
+  return (
+    <List searchBarPlaceholder="Search participants by name..." isLoading={isLoading}>
+      {participants.map((p) => (
+        <List.Item
+          key={p.id}
+          title={p.displayName}
+          icon={Icon.Person}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Save & Back to List"
+                shortcut={{ modifiers: [], key: "return" }}
+                onAction={() => selectAndSave(p.id)}
+              />
+            </ActionPanel>
+          }
+        />
+      ))}
+    </List>
+  );
+}
+
+function EditAnswerForm(props: {
+  cell: BingoCell;
+  bingoId?: string;
+  onSubmit: (cellId: string, nextText: string, helpedByParticipantId: string | null) => Promise<void>;
+}) {
+  const { cell, bingoId, onSubmit } = props;
+  const { push, pop } = useNavigation();
+
+  const { data: participants = [] } = useCachedPromise(fetchBingoParticipants, [bingoId ?? ""], {
+    execute: Boolean(bingoId),
+  });
+  const goToHelperStep = Boolean(bingoId && participants.length > 0);
+
   return (
     <Form
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Save Answer"
-            shortcut={{ modifiers: [], key: "return" }}
+            title={goToHelperStep ? "Next: Who Helped You?" : "Save Answer"}
+            shortcut={{ modifiers: ["cmd"], key: "return" }}
             onSubmit={async (values: { text: string }) => {
-              await onSubmit(cell.id, values.text);
-              pop();
+              const text = values.text.trim();
+              if (!text) return;
+              if (goToHelperStep) {
+                push(<SelectHelperList bingoId={bingoId!} cellId={cell.id} answerText={text} onSave={onSubmit} />);
+              } else {
+                await onSubmit(cell.id, text, null);
+                pop();
+              }
             }}
           />
         </ActionPanel>
       }
     >
       <Form.TextArea id="text" title="Answer" defaultValue={cell.text} placeholder="Your answer" />
+      {goToHelperStep && <Form.Description title="" text="Press Enter, then choose who helped you (search by name)." />}
     </Form>
   );
 }
@@ -314,7 +407,7 @@ async function fetchRemoteGridState(
 
   const { data: progressData, error: progressError } = await supabase
     .from("bingo_progress")
-    .select("cell_id,status,answer_text")
+    .select("cell_id,status,answer_text,helped_by_participant_id")
     .eq("bingo_id", bingoId)
     .eq("participant_id", participantId);
 
@@ -322,21 +415,43 @@ async function fetchRemoteGridState(
     throw new Error(progressError.message);
   }
 
-  const progressByCell = new Map<string, { status: string; answer_text: string | null }>();
+  const helpedByIds = [
+    ...new Set((progressData ?? []).map((r) => r.helped_by_participant_id).filter(Boolean)),
+  ] as string[];
+  const participantDisplayByName = new Map<string, string>();
+  if (helpedByIds.length > 0) {
+    const { data: helpersData } = await supabase
+      .from("bingo_participants")
+      .select("id,display_name")
+      .in("id", helpedByIds);
+    for (const p of helpersData ?? []) {
+      participantDisplayByName.set(String(p.id), p.display_name ?? "Anonymous");
+    }
+  }
+
+  const progressByCell = new Map<
+    string,
+    { status: string; answer_text: string | null; helped_by_participant_id: string | null }
+  >();
   for (const row of progressData ?? []) {
+    const helpedById = row.helped_by_participant_id != null ? String(row.helped_by_participant_id) : null;
     progressByCell.set(String(row.cell_id), {
       status: String(row.status),
       answer_text: row.answer_text != null ? String(row.answer_text) : null,
+      helped_by_participant_id: helpedById,
     });
   }
 
   const cells: BingoCell[] = (cellsData ?? []).map((row) => {
     const progress = progressByCell.get(String(row.id));
+    const helpedById = progress?.helped_by_participant_id ?? null;
     return {
       id: String(row.id),
       text: progress?.answer_text ?? "",
       prompt: row.prompt != null ? String(row.prompt) : undefined,
       status: progress?.status === "validated" ? "validated" : "todo",
+      helpedByParticipantId: helpedById ?? undefined,
+      helpedByDisplayName: helpedById ? (participantDisplayByName.get(helpedById) ?? null) : undefined,
     };
   });
 

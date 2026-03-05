@@ -5,6 +5,9 @@ export interface BingoCell {
   text: string;
   prompt?: string;
   status: BingoCellStatus;
+  /** Participant who helped fill this answer (id and display name for UI). */
+  helpedByParticipantId?: string | null;
+  helpedByDisplayName?: string | null;
 }
 
 export interface BingoBoard {
