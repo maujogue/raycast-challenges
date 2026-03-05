@@ -10,6 +10,21 @@ interface BingoSearchResult {
   theme: string | null;
 }
 
+async function fetchBingoCells(bingoId: string): Promise<{ text: string; prompt: string | null }[]> {
+  const { data, error } = await supabase
+    .from("bingo_cells")
+    .select("text,prompt,position")
+    .eq("bingo_id", bingoId)
+    .order("position", { ascending: true });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row) => ({
+    text: String(row.text),
+    prompt: row.prompt != null ? String(row.prompt) : null,
+  }));
+}
+
 async function fetchBingos(): Promise<BingoSearchResult[]> {
   const { data, error } = await supabase
     .from("bingos")
@@ -119,7 +134,13 @@ export default function Command() {
                 <Action.Push
                   title="Join Bingo"
                   icon={Icon.Person}
-                  target={<JoinBingoForm defaultName={displayName} onSubmit={(values) => runJoin(bingo.id, values)} />}
+                  target={
+                    <JoinBingoForm
+                      bingoId={bingo.id}
+                      defaultName={displayName}
+                      onSubmit={(values) => runJoin(bingo.id, values)}
+                    />
+                  }
                 />
                 <Action.CopyToClipboard title="Copy Bingo ID" content={bingo.id} />
               </ActionPanel>
@@ -130,15 +151,27 @@ export default function Command() {
   );
 }
 
-function JoinBingoForm(props: { defaultName: string; onSubmit: (values: { displayName: string }) => Promise<void> }) {
+function JoinBingoForm(props: {
+  bingoId: string;
+  defaultName: string;
+  onSubmit: (values: { displayName: string }) => Promise<void>;
+}) {
+  const { data: cells = [], isLoading } = useCachedPromise(fetchBingoCells, [props.bingoId]);
+  const challengesText =
+    cells.length > 0
+      ? cells.map((c, i) => `${i + 1}. ${(c.prompt || c.text || "Challenge").trim()}`).join("\n")
+      : "No challenges defined yet.";
+
   return (
     <Form
+      isLoading={isLoading}
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Join" onSubmit={props.onSubmit} />
         </ActionPanel>
       }
     >
+      <Form.Description title="Challenges" text={challengesText} />
       <Form.TextField id="displayName" title="Display Name" defaultValue={props.defaultName} />
     </Form>
   );

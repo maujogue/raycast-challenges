@@ -116,13 +116,9 @@ export default function Command() {
   });
 
   const ownedIds = new Set(ownedBingos.map((b) => b.id));
-  const allBingos = [
-    ...ownedBingos,
-    ...joinedBingos.filter((b) => !ownedIds.has(b.id)),
-  ];
+  const allBingos = [...ownedBingos, ...joinedBingos.filter((b) => !ownedIds.has(b.id))];
 
-  const bingos =
-    bingoFilter === "mine" ? allBingos.filter((b) => b.owner_id === ownerId) : allBingos;
+  const bingos = bingoFilter === "mine" ? allBingos.filter((b) => b.owner_id === ownerId) : allBingos;
   const isLoading = isOwnedLoading || isJoinedLoading;
   const error = ownedError ?? joinedError;
 
@@ -230,11 +226,7 @@ export default function Command() {
       isLoading={isLoading}
       searchBarPlaceholder="Manage your bingos"
       searchBarAccessory={
-        <List.Dropdown
-          tooltip="Filter"
-          value={bingoFilter}
-          onChange={(value) => setBingoFilter(value as BingoFilter)}
-        >
+        <List.Dropdown tooltip="Filter" value={bingoFilter} onChange={(value) => setBingoFilter(value as BingoFilter)}>
           <List.Dropdown.Item value="all" title="All (yours + joined)" />
           <List.Dropdown.Item value="mine" title="Mine only" />
         </List.Dropdown>
